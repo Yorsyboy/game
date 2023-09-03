@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import { getDatabase, ref, push, get, set } from 'firebase/database';
+import { db } from '../firebase'; // Import your Firebase configuration here
+import { getDatabase, ref, push, set, get } from 'firebase/database';
 
 function Board() {
-  const [boardState, setBoardState] = useState(Array(16).fill(null));
+  const WINNING_POSITION = 2; // Change to the winning position for your game
+
+  const [boardState, setBoardState] = useState(new Array(16).fill(null));
   const [currentPlayer, setCurrentPlayer] = useState('red');
   const [diceValue, setDiceValue] = useState(0);
   const [computerDiceValue, setComputerDiceValue] = useState(0);
@@ -11,10 +13,8 @@ function Board() {
     red: -1,
     blue: -1,
   });
-  const [hasPlayerMoved, setHasPlayerMoved] = useState(false); // Track if player moved after rolling 6
+  const [hasPlayerMoved, setHasPlayerMoved] = useState(false);
   const [gameResults, setGameResults] = useState([]);
-
-  const WINNING_POSITION = boardState.length - 1; // Define the winning position
 
   const rollDice = () => {
     const randomValue = Math.floor(Math.random() * 6) + 1;
@@ -22,19 +22,20 @@ function Board() {
 
     if (currentPlayer === 'red') {
       if (randomValue !== 6 || hasPlayerMoved) {
-        // Only switch to the computer's turn if the player didn't roll a 6 or has already moved
         setTimeout(() => {
           setCurrentPlayer('blue');
-          setHasPlayerMoved(false); // Reset the flag when switching to the computer's turn
-          makeComputerMove();
+          setHasPlayerMoved(false);
         }, 1000);
       }
+    } else if (currentPlayer === 'blue') {
+      setTimeout(() => {
+        makeComputerMove();
+      }, 1000);
     }
   };
 
   const movePlayer = (player) => {
-    if (!hasPlayerMoved && diceValue === 6) {
-      // If the player hasn't moved after rolling a 6, they can move one step
+    if (!hasPlayerMoved && (player === 'red' && diceValue === 6) || (player === 'blue' && computerDiceValue === 6)) {
       const newPosition = playerPositions[player] + 1;
       if (newPosition <= WINNING_POSITION) {
         const newBoardState = [...boardState];
@@ -42,15 +43,12 @@ function Board() {
         newBoardState[playerPositions[player]] = null;
         setBoardState(newBoardState);
         setPlayerPositions({ ...playerPositions, [player]: newPosition });
-        setHasPlayerMoved(true); // Set the flag to indicate that the player has moved
+        setHasPlayerMoved(true);
 
-        // Check for a winner
         if (newPosition === WINNING_POSITION) {
-          // Declare the current player as the winner
+          storeGameResult(player.toUpperCase());
           alert(`${player.toUpperCase()} is the winner!`);
-          // Reset the game
           resetGame();
-          return;
         }
       }
     }
@@ -62,20 +60,19 @@ function Board() {
       setComputerDiceValue(randomValue);
 
       if (randomValue === 6) {
-        // If the computer rolled a 6, they should make a move
         movePlayer('blue');
+      } else {
+        setTimeout(() => {
+          setCurrentPlayer('red');
+          setComputerDiceValue(0);
+          setDiceValue(0);
+        }, 1000);
       }
-
-      setTimeout(() => {
-        setCurrentPlayer('red');
-        setComputerDiceValue(0); // Reset computer's dice value after 5 seconds
-        setDiceValue(0); // Reset player's dice value to 0
-      }, 1000);
     }, 1000);
   };
 
   const resetGame = () => {
-    setBoardState(Array(16).fill(null));
+    setBoardState(new Array(16).fill(null));
     setCurrentPlayer('red');
     setDiceValue(0);
     setComputerDiceValue(0);
@@ -83,7 +80,7 @@ function Board() {
       red: -1,
       blue: -1,
     });
-    setHasPlayerMoved(false); // Reset the flag when resetting the game
+    setHasPlayerMoved(false);
   };
 
   const storeGameResult = (winner) => {
@@ -92,7 +89,6 @@ function Board() {
 
     newResultRef
       .then(() => {
-        // Set the winner and timestamp in the database
         const timestamp = new Date().getTime();
         return set(newResultRef, {
           winner,
@@ -114,7 +110,7 @@ function Board() {
           snapshot.forEach((childSnapshot) => {
             results.push(childSnapshot.val());
           });
-          setGameResults(results); // Set game results in state
+          setGameResults(results);
         } else {
           console.log('No game results available.');
         }
@@ -123,7 +119,6 @@ function Board() {
         console.error('Error fetching game results:', error);
       });
   };
-
 
   useEffect(() => {
     if (currentPlayer === 'blue') {
@@ -144,9 +139,8 @@ function Board() {
               className={`w-14 h-14 border border-white flex items-center justify-center ${cell === 'red'
                 ? 'bg-red-500'
                 : cell === 'blue'
-                  ? 'bg-blue-500'
-                  : 'bg-green-500'
-                }`}
+                ? 'bg-blue-500'
+                : ''}`}
               onClick={() => movePlayer(currentPlayer)}
             >
               {/* Render player pieces within cells */}
